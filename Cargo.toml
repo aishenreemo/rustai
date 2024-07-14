@@ -1,0 +1,9 @@
+[package]
+name = "rustai"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+num = "0.4.3"
+rand = "0.8.4"
+anyhow = "1.0"
