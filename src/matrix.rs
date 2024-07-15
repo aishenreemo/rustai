@@ -9,8 +9,6 @@ use rand::distributions::Distribution;
 use rand::distributions::Standard;
 use rand::Rng;
 
-use crate::network::Activation;
-
 #[derive(Debug, Default, Clone)]
 pub struct Matrix<T>
 where
@@ -27,7 +25,7 @@ where
 {
     pub fn new<I: Into<usize>>(cols: I, rows: I) -> Self {
         let (cols, rows) = (cols.into(), rows.into());
-        let items = vec![T::default(); cols * rows];
+        let items = vec![T::zero(); cols * rows];
 
         Self { cols, rows, items }
     }
@@ -131,12 +129,12 @@ where
 {
     type Output = T;
 
-    fn index(&self, (cols, rows): (usize, usize)) -> &Self::Output {
-        if cols >= self.cols || rows >= self.rows {
-            panic!("Index out of bounds while indexing matrix.");
+    fn index(&self, (col, row): (usize, usize)) -> &Self::Output {
+        if col >= self.cols || row >= self.rows {
+            panic!("Index out of bounds while indexing matrix.\nMatrix[{col}, {row}]\n{self:?}");
         }
 
-        &self.items[rows * self.cols + cols]
+        &self.items[row * self.cols + col]
     }
 }
 
@@ -144,11 +142,11 @@ impl<T> IndexMut<(usize, usize)> for Matrix<T>
 where
     T: MatrixItem,
 {
-    fn index_mut(&mut self, (cols, rows): (usize, usize)) -> &mut Self::Output {
-        if cols >= self.cols || rows >= self.rows {
-            panic!("Index out of bounds while indexing matrix.");
+    fn index_mut(&mut self, (col, row): (usize, usize)) -> &mut Self::Output {
+        if col >= self.cols || row >= self.rows {
+            panic!("Index out of bounds while indexing matrix.\nMatrix[{col}, {row}]\n{self:?}");
         }
 
-        &mut self.items[rows * self.cols + cols]
+        &mut self.items[row * self.cols + col]
     }
 }
