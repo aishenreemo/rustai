@@ -83,6 +83,33 @@ where
             BiasesGradient      => 2 * arch_len + 3 * wb_len + layer_index,
         }
     }
+
+    pub fn learn(&mut self, learn_rate: T) {
+        use NetworkPart::*;
+        let mut data = self.data.borrow_mut();
+
+        for i in 0..(self.arch.len() - 1) {
+            let w_index = self.index(Weights, i);
+            let b_index = self.index(Biases, i);
+            let wg_index = self.index(WeightsGradient, i);
+            let bg_index = self.index(BiasesGradient, i);
+
+            for i in 0..data[w_index].items.len() {
+                let g_value = data[wg_index].items[i];
+                data[w_index].items[i] += -learn_rate * g_value;
+            }
+
+            for i in 0..data[b_index].items.len() {
+                let g_value = data[bg_index].items[i];
+                data[b_index].items[i] += -learn_rate * g_value;
+            }
+        }
+    }
+
+    pub fn output(&self) -> Matrix<T> {
+        use NetworkPart::Activations;
+        self.data.borrow()[self.index(Activations, self.arch.len() - 1)].clone()
+    }
 }
 
 impl<T> Network<T>
@@ -108,14 +135,134 @@ where
                 data[weight_index].clone() +
                 data[biases_index].clone();
 
-            let cols = data[activation_index].cols;
-            let rows = data[activation_index].rows;
-            for i in 0..(cols * rows) {
-                let col = i % cols;
-                let row = i / cols;
+            for item in data[activation_index].items.iter_mut() {
+                *item = self.activation.activate(*item);
+            }
+        }
+    }
 
-                let matrix = &mut data[activation_index];
-                matrix[(col, row)] = self.activation.activate(matrix[(col, row)]);
+    pub fn cost(&mut self, tdata: &Matrix<T>) -> T {
+        let input_cols = self.arch[0] as usize;
+        let output_cols = self.arch[self.arch.len() - 1] as usize;
+        if input_cols + output_cols != tdata.cols {
+            panic!("Input mismatch while calculating cost. Training data corrupted.");
+        }
+
+        use NetworkPart::*;
+
+        let mut result = T::zero();
+
+        for i in 0..tdata.rows {
+            let start = i * tdata.cols;
+            let end = start + input_cols;
+            let irow = &tdata.items[start..end];
+            self.forward(irow);
+
+            let start = i * tdata.cols + input_cols;
+            let end = start + output_cols;
+            let expected = &tdata.items[start..end];
+
+            let start = self.index(Activations, self.arch.len() - 1);
+            let predicted = &self.data.borrow()[start].items;
+
+            for i in 0..output_cols {
+                let diff = predicted[i] - expected[i];
+                result += diff * diff;
+            }
+        }
+
+        result
+    }
+
+    pub fn backpropagate(&mut self, tdata: &Matrix<T>) {
+        use NetworkPart::*;
+
+        for i in 0..(self.arch.len() - 1) {
+            let mut data = self.data.borrow_mut();
+            let weights_g = self.index(WeightsGradient, i);
+            let biases_g = self.index(BiasesGradient, i);
+
+            for item in data[weights_g].items.iter_mut() {
+                *item = T::zero();
+            }
+
+            for item in data[biases_g].items.iter_mut() {
+                *item = T::zero();
+            }
+        }
+
+        let input_cols = self.arch[0] as usize;
+        let output_cols = self.arch[self.arch.len() - 1] as usize;
+
+        for i in 0..tdata.rows {
+            let start = i * tdata.cols;
+            let end = start + input_cols;
+            let irow = &tdata.items[start..end];
+            self.forward(irow);
+
+            let mut data = self.data.borrow_mut();
+            for i in 0..self.arch.len() {
+                let activations_g_index = self.index(ActivationsGradient, i);
+
+                for item in data[activations_g_index].items.iter_mut() {
+                    *item = T::zero();
+                }
+            }
+
+            let start = i * tdata.cols + input_cols;
+            let end = start + output_cols;
+            let expected = &tdata.items[start..end];
+
+            let predicted_index = self.index(Activations, self.arch.len() - 1);
+            let output_g_index = self.index(ActivationsGradient, self.arch.len() - 1);
+
+            for (i, &e) in expected.iter().enumerate() {
+                let p = data[predicted_index][(i, 0)];
+                data[output_g_index][(i, 0)] = T::from(2.0).unwrap() * (p - e);
+            }
+
+            for j in (1..self.arch.len()).rev() {
+                let a_index = self.index(Activations, j);
+                let ag_index = self.index(ActivationsGradient, j);
+
+                let pa_index = self.index(Activations, j - 1);
+                let pw_index = self.index(Weights, j - 1);
+
+                let bg_index = self.index(BiasesGradient, j - 1);
+                let wg_index = self.index(WeightsGradient, j - 1);
+                let pag_index = self.index(ActivationsGradient, j - 1);
+
+                for k in 0..data[a_index].cols {
+		    let g = data[ag_index][(k, 0)];
+		    let n = data[a_index][(k, 0)];
+                    let d = self.activation.derivative(n);
+
+                    data[bg_index][(k, 0)] += g * d;
+
+                    for l in 0..data[pa_index].cols {
+                        let pn = data[pa_index][(l, 0)];
+                        let w = data[pw_index][(k, l)];
+
+                        data[wg_index][(k, l)] += g * d * pn;
+                        data[pag_index][(l, 0)] += g * d * w;
+                    }
+                }
+            }
+        }
+
+        for i in 0..(self.arch.len() - 1) {
+            let mut data = self.data.borrow_mut();
+            let weights_g_index = self.index(WeightsGradient, i);
+            let biases_g_index = self.index(BiasesGradient, i);
+
+            let n = T::from(1.0 / tdata.rows as f64).unwrap();
+
+            for item in data[weights_g_index].items.iter_mut() {
+                *item = (*item) * n;
+            }
+
+            for item in data[biases_g_index].items.iter_mut() {
+                *item = (*item) * n;
             }
         }
     }
@@ -137,6 +284,7 @@ where
     }
 }
 
+#[allow(dead_code)]
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum NetworkPart {
     ActivationsGradient,
@@ -150,6 +298,7 @@ enum NetworkPart {
 pub trait NetworkItem: MatrixItem + Float {}
 impl NetworkItem for f64 {}
 
+#[allow(dead_code)]
 #[derive(Default, Debug)]
 pub enum Activation<T>
 where
@@ -161,6 +310,7 @@ where
     Custom(fn(T) -> T, fn(T) -> T),
 }
 
+#[allow(dead_code)]
 impl<T> Activation<T>
 where
     T: NetworkItem,
@@ -168,19 +318,22 @@ where
 {
     fn activate(&self, x: T) -> T {
         use Activation::*;
+        let x = f64::from(x);
         match self {
-            &Identity => x,
-            &Sigmoid => T::from(1.0 / (1.0 + f64::from(x))).unwrap(),
-            &Custom(f, ..) => f(x),
+            &Identity => T::from(x).unwrap(),
+            &Sigmoid => T::from(1.0 / (1.0 + (-x).exp())).unwrap(),
+            &Custom(f, ..) => f(T::from(x).unwrap()),
         }
     }
 
     fn derivative(&self, x: T) -> T {
         use Activation::*;
+        let x = f64::from(x);
+
         match self {
-            &Identity => x,
-            &Sigmoid => T::from(1.0 / (1.0 + f64::from(x))).unwrap(),
-            &Custom(.., d) => d(x),
+            &Identity => T::from(1).unwrap(),
+            &Sigmoid => T::from(x * (1.0 - x)).unwrap(),
+            &Custom(.., d) => d(T::from(x).unwrap()),
         }
     }
 }

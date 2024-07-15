@@ -18,7 +18,7 @@ where
 {
     pub cols: usize,
     pub rows: usize,
-    items: Vec<T>,
+    pub items: Vec<T>,
 }
 
 impl<T> Matrix<T>
@@ -28,6 +28,13 @@ where
     pub fn new<I: Into<usize>>(cols: I, rows: I) -> Self {
         let (cols, rows) = (cols.into(), rows.into());
         let items = vec![T::default(); cols * rows];
+
+        Self { cols, rows, items }
+    }
+
+    pub fn with_items<I: Into<usize>, J: Into<Vec<T>>>(items: J, cols: I, rows: I) -> Self {
+        let (cols, rows) = (cols.into(), rows.into());
+        let items = items.into();
 
         Self { cols, rows, items }
     }
