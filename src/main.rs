@@ -1,16 +1,16 @@
-use anyhow::Ok;
-use anyhow::Result;
+#![feature(stmt_expr_attributes)]
+
+use network::Activation;
 use network::Network;
 
-use crate::activation::Activation;
-
-mod activation;
 mod matrix;
 mod network;
 
-fn main() -> Result<()> {
-    let network: Network<f64> = Network::with_activation(&[2, 2, 1], Activation::Sigmoid)?;
+fn main() {
+    let mut rng = rand::thread_rng();
+    let mut network: Network<f64> = Network::with_activation(&[2, 2, 1], Activation::Sigmoid);
 
-    println!("{:?}", network);
-    Ok(())
+    network.randomize(&mut rng);
+
+    println!("{:#?}", network);
 }
