@@ -9,20 +9,31 @@ use crate::matrix::Matrix;
 use crate::matrix::MatrixItem;
 
 #[derive(Debug)]
-pub struct Network<T>
+pub struct Network<T, U>
 where
     T: NetworkItem,
+    U: Activation<T>,
 {
-    activation: Activation<T>,
-    arch: Box<[u8]>,
     data: RefCell<Vec<Matrix<T>>>,
+    arch: Box<[u8]>,
+    activation: U,
 }
 
-impl<T> Network<T>
+impl<T> Network<T, ActivationVariant>
 where
     T: NetworkItem,
 {
     pub fn new(arch: &[u8]) -> Self {
+        Self::with_activation(arch, ActivationVariant::default())
+    }
+}
+
+impl<T, U> Network<T, U>
+where
+    T: NetworkItem,
+    U: Activation<T>,
+{
+    pub fn with_activation(arch: &[u8], activation: U) -> Self {
         if arch.len() < 2 {
             panic!(
                 "Cannot construct a neural network, expects atleast 2 layers got {}",
@@ -45,20 +56,12 @@ where
 
         let arch: Box<[u8]> = arch.into();
         let data: RefCell<Vec<Matrix<T>>> = RefCell::new(data);
-        let activation: Activation<T> = Activation::default();
 
         Self {
             activation,
             arch,
             data,
         }
-    }
-
-    pub fn with_activation(arch: &[u8], activation: Activation<T>) -> Self {
-        let mut network = Network::new(arch);
-        network.activation = activation;
-
-        network
     }
 
     fn index(&self, part: NetworkPart, layer_index: usize) -> usize {
@@ -110,13 +113,7 @@ where
         use NetworkPart::Activations;
         self.data.borrow()[self.index(Activations, self.arch.len() - 1)].clone()
     }
-}
 
-impl<T> Network<T>
-where
-    T: NetworkItem,
-    f64: From<T>,
-{
     pub fn forward(&mut self, input: &[T]) {
         use NetworkPart::*;
 
@@ -235,7 +232,7 @@ where
                 for k in 0..data[a_index].cols {
 		    let g = data[ag_index][(k, 0)];
 		    let n = data[a_index][(k, 0)];
-                    let d = self.activation.derivative(n);
+                    let d = self.activation.differentiate(n);
 
                     data[bg_index][(k, 0)] += g * d;
 
@@ -268,9 +265,10 @@ where
     }
 }
 
-impl<T> Network<T>
+impl<T, U> Network<T, U>
 where
     T: NetworkItem,
+    U: Activation<T>,
     Standard: Distribution<T>,
 {
     pub fn randomize<R: Rng>(&mut self, rng: &mut R) {
@@ -296,44 +294,47 @@ enum NetworkPart {
 }
 
 pub trait NetworkItem: MatrixItem + Float {}
+impl NetworkItem for f32 {}
 impl NetworkItem for f64 {}
 
-#[allow(dead_code)]
-#[derive(Default, Debug)]
-pub enum Activation<T>
-where
-    T: NetworkItem,
-{
-    #[default]
-    Identity,
-    Sigmoid,
-    Custom(fn(T) -> T, fn(T) -> T),
+pub trait Activation<T: NetworkItem> {
+    fn activate(&self, x: T) -> T;
+    fn differentiate(&self, x: T) -> T;
 }
 
 #[allow(dead_code)]
-impl<T> Activation<T>
+#[derive(Default, Debug)]
+pub enum ActivationVariant {
+    #[default]
+    Identity,
+    Sigmoid,
+}
+
+#[allow(dead_code)]
+impl<T> Activation<T> for ActivationVariant
 where
     T: NetworkItem,
-    f64: From<T>,
 {
     fn activate(&self, x: T) -> T {
-        use Activation::*;
-        let x = f64::from(x);
-        match self {
-            &Identity => T::from(x).unwrap(),
-            &Sigmoid => T::from(1.0 / (1.0 + (-x).exp())).unwrap(),
-            &Custom(f, ..) => f(T::from(x).unwrap()),
-        }
+        use ActivationVariant::*;
+        let x = x.to_f64().expect("Unable to convert NetworkItem to primitive float.");
+        let y = match self {
+            &Identity => x,
+            &Sigmoid => 1.0 / (1.0 + (-x).exp()),
+        };
+
+        T::from(y).expect("Unable to convert primitive float to NetworkItem.")
     }
 
-    fn derivative(&self, x: T) -> T {
-        use Activation::*;
-        let x = f64::from(x);
+    fn differentiate(&self, x: T) -> T {
+        use ActivationVariant::*;
+        let x = x.to_f64().expect("Unable to convert NetworkItem to primitive float.");
 
-        match self {
-            &Identity => T::from(1).unwrap(),
-            &Sigmoid => T::from(x * (1.0 - x)).unwrap(),
-            &Custom(.., d) => d(T::from(x).unwrap()),
-        }
+        let y = match self {
+            &Identity => 1.0,
+            &Sigmoid => x * (1.0 - x),
+        };
+
+        T::from(y).expect("Unable to convert primitive float to NetworkItem.")
     }
 }

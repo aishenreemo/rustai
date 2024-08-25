@@ -73,6 +73,7 @@ where
 {
 }
 
+impl MatrixItem for f32 {}
 impl MatrixItem for f64 {}
 
 impl<T> Mul for Matrix<T>
