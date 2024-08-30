@@ -8,12 +8,14 @@ use rand::Rng;
 use crate::matrix::Matrix;
 use crate::matrix::MatrixItem;
 
+/// The neural network.
 #[derive(Debug)]
 pub struct Network<T, U>
 where
     T: NetworkItem,
     U: Activation<T>,
 {
+    /// All data of the neural network that is stored in a 1D matrix array.
     data: RefCell<Vec<Matrix<T>>>,
     arch: Box<[u8]>,
     activation: U,
@@ -23,6 +25,7 @@ impl<T> Network<T, ActivationVariant>
 where
     T: NetworkItem,
 {
+    /// Create a new neural network with the default activation function.
     pub fn new(arch: &[u8]) -> Self {
         Self::with_activation(arch, ActivationVariant::default())
     }
@@ -33,6 +36,7 @@ where
     T: NetworkItem,
     U: Activation<T>,
 {
+    /// Create a new neural network with the activation function.
     pub fn with_activation(arch: &[u8], activation: U) -> Self {
         if arch.len() < 2 {
             panic!(
@@ -64,6 +68,7 @@ where
         }
     }
 
+    /// Get the index position of the matrix based on the network part that is specified.
     fn index(&self, part: NetworkPart, layer_index: usize) -> usize {
         use NetworkPart::*;
 
@@ -87,6 +92,7 @@ where
         }
     }
 
+    /// Apply the gradient to the original neural network data.
     pub fn learn(&mut self, learn_rate: T) {
         use NetworkPart::*;
         let mut data = self.data.borrow_mut();
@@ -109,11 +115,13 @@ where
         }
     }
 
+    /// Clone the output matrix
     pub fn output(&self) -> Matrix<T> {
         use NetworkPart::Activations;
         self.data.borrow()[self.index(Activations, self.arch.len() - 1)].clone()
     }
 
+    /// Forwards the input specified to get an output.
     pub fn forward(&mut self, input: &[T]) {
         use NetworkPart::*;
 
@@ -138,6 +146,7 @@ where
         }
     }
 
+    /// Compute for the loss function.
     pub fn cost(&mut self, tdata: &Matrix<T>) -> T {
         let input_cols = self.arch[0] as usize;
         let output_cols = self.arch[self.arch.len() - 1] as usize;
@@ -171,6 +180,7 @@ where
         result
     }
 
+    /// Backpropagate and get the gradient.
     pub fn backpropagate(&mut self, tdata: &Matrix<T>) {
         use NetworkPart::*;
 
@@ -271,6 +281,7 @@ where
     U: Activation<T>,
     Standard: Distribution<T>,
 {
+    /// Randomizes all matrices inside the network.
     pub fn randomize<R: Rng>(&mut self, rng: &mut R) {
         use NetworkPart::*;
         let mut data = self.data.borrow_mut();
@@ -282,6 +293,7 @@ where
     }
 }
 
+/// The whole network is divided into subparts.
 #[allow(dead_code)]
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum NetworkPart {
@@ -297,11 +309,13 @@ pub trait NetworkItem: MatrixItem + Float {}
 impl NetworkItem for f32 {}
 impl NetworkItem for f64 {}
 
+/// Implement this trait to your struct to have custom activation functions.
 pub trait Activation<T: NetworkItem> {
     fn activate(&self, x: T) -> T;
     fn differentiate(&self, x: T) -> T;
 }
 
+/// Builtin activation function options.
 #[allow(dead_code)]
 #[derive(Default, Debug)]
 pub enum ActivationVariant {
@@ -315,6 +329,7 @@ impl<T> Activation<T> for ActivationVariant
 where
     T: NetworkItem,
 {
+    /// Activation function.
     fn activate(&self, x: T) -> T {
         use ActivationVariant::*;
         let x = x.to_f64().expect("Unable to convert NetworkItem to primitive float.");
@@ -326,6 +341,7 @@ where
         T::from(y).expect("Unable to convert primitive float to NetworkItem.")
     }
 
+    /// Derivative function.
     fn differentiate(&self, x: T) -> T {
         use ActivationVariant::*;
         let x = x.to_f64().expect("Unable to convert NetworkItem to primitive float.");

@@ -9,13 +9,17 @@ use rand::distributions::Distribution;
 use rand::distributions::Standard;
 use rand::Rng;
 
+/// A 2-dimensional array used for neural network operations
 #[derive(Debug, Default, Clone)]
 pub struct Matrix<T>
 where
     T: MatrixItem,
 {
+    /// The number of columns.
     pub cols: usize,
+    /// The number of rows.
     pub rows: usize,
+    /// The data in a single flat dynamic array.
     pub items: Vec<T>,
 }
 
@@ -23,6 +27,7 @@ impl<T> Matrix<T>
 where
     T: MatrixItem,
 {
+    /// Create a new matrix given the columns and rows.
     pub fn new<I: Into<usize>>(cols: I, rows: I) -> Self {
         let (cols, rows) = (cols.into(), rows.into());
         let items = vec![T::zero(); cols * rows];
@@ -30,6 +35,7 @@ where
         Self { cols, rows, items }
     }
 
+    /// Create a new matrix from an existing `Vec<T>`.
     pub fn with_items<I: Into<usize>, J: Into<Vec<T>>>(items: J, cols: I, rows: I) -> Self {
         let (cols, rows) = (cols.into(), rows.into());
         let items = items.into();
@@ -37,6 +43,7 @@ where
         Self { cols, rows, items }
     }
 
+    /// Resize the matrix and initializing everything to T::zero()
     pub fn resize<I: Into<usize>>(&mut self, cols: I, rows: I) {
         self.cols = cols.into();
         self.rows = rows.into();
@@ -44,6 +51,7 @@ where
         self.items.resize(self.cols * self.rows, T::default());
     }
 
+    /// Overwrite the stuff inside the matrix.
     pub fn set_data(&mut self, input: &[T]) {
         if input.len() != self.cols {
             panic!("Input mismatch while setting data to matrix.");
@@ -60,6 +68,7 @@ where
     T: MatrixItem,
     Standard: Distribution<T>,
 {
+    /// Randomize the stuff inside the matrix.
     pub fn randomize<R: Rng>(&mut self, rng: &mut R) {
         for item in self.items.iter_mut() {
             *item = rng.gen();

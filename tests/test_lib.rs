@@ -21,12 +21,14 @@ fn test_xor() {
 
     network.randomize(&mut rng);
 
-    for _ in 0..50_000 {
+    for i in 0..100_000 {
         network.backpropagate(&tdata);
         network.learn(LEARN_RATE);
 
-        // let cost = network.cost(&tdata);
-        // println!("{cost}");
+        if i % 10_000 == 0 {
+            let cost = network.cost(&tdata);
+            println!("Cost: {cost}");
+        }
     }
 
     for i in 0..2 {
